@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".SignUpActivity"
+    android:background="#16172C">
+
+    <ProgressBar
+        android:id="@+id/progressSignUpActivity"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:visibility="invisible"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/textEpiRisk"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/editTextPhoneNumber"
+        android:text="EpiRisk"
+        android:layout_marginTop="100dp"
+        android:textColor="#FFFFFF"
+        android:textSize="54sp"/>
+
+    <EditText
+        android:id="@+id/editTextPhoneNumber"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/textEpiRisk"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/editTextPassword"
+        android:layout_marginLeft="32dp"
+        android:layout_marginRight="32dp"
+        android:textColorHint="#66FFFFFF"
+        android:backgroundTint="#66FFFFFF"
+        android:text=""
+        android:inputType="phone"
+        android:hint="Enter Phone Number"/>
+
+    <EditText
+        android:id="@+id/editTextPassword"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/editTextPhoneNumber"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/editTextPasswordConfirmation"
+        android:layout_marginLeft="32dp"
+        android:layout_marginRight="32dp"
+        android:textColorHint="#66FFFFFF"
+        android:backgroundTint="#66FFFFFF"
+        android:text=""
+        android:inputType="textPassword"
+        android:hint="Create Password" />
+
+    <EditText
+        android:id="@+id/editTextPasswordConfirmation"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/editTextPassword"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/editTextName"
+        android:inputType="textPassword"
+        android:layout_marginLeft="32dp"
+        android:layout_marginRight="32dp"
+        android:textColorHint="#66FFFFFF"
+        android:backgroundTint="#66FFFFFF"
+        android:text=""
+        android:hint="Confirm Password" />
+
+    <EditText
+        android:id="@+id/editTextName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/editTextPasswordConfirmation"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/buttonSignUp"
+        android:layout_marginLeft="32dp"
+        android:layout_marginRight="32dp"
+        android:textColorHint="#66FFFFFF"
+        android:backgroundTint="#66FFFFFF"
+        android:text=""
+        android:hint="Enter Name"
+        android:inputType="text" />
+
+    <Button
+        android:id="@+id/buttonSignUp"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toBottomOf="@+id/editTextName"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:background="@drawable/rounded_border"
+        android:textSize="24sp"
+        android:layout_marginLeft="32dp"
+        android:layout_marginRight="32dp"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="64dp"
+        android:text="VERIFY PHONE NUMBER"/>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

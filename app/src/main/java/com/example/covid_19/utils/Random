@@ -1,0 +1,807 @@
+
+
+
+
+<<<<<<<<<<<GPS LOCATION WORKING>>>>>>>>>>>
+
+
+package com.example.covid_19
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Criteria
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import androidx.appcompat.app.AppCompatActivity
+import android.os.Bundle
+import android.provider.Settings
+import android.util.Log
+import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.example.covid_19.network.RetrofitService
+import com.example.covid_19.utils.MessageParser
+import com.google.android.gms.nearby.Nearby
+import com.google.android.gms.nearby.messages.Distance
+import com.google.android.gms.nearby.messages.Message
+import com.google.android.gms.nearby.messages.MessageListener
+import com.google.android.gms.nearby.messages.MessagesClient
+import com.google.gson.JsonObject
+import io.reactivex.schedulers.Schedulers
+
+class MainActivity : AppCompatActivity() {
+
+    private val TAG = "MainActivity"
+    private var broadcastMessage: Message? = null
+    private lateinit var locationManager: LocationManager
+    private lateinit var phoneNumber: String
+    private lateinit var nearbyCloent: MessagesClient
+    val list: MutableList<Pair<Long, String>> = ArrayList()
+
+    val messageListener = object: MessageListener() {
+        override fun onFound(message: Message?) {
+            Log.d(TAG, "Messsage found = ${String(message!!.content)}")
+            val jsonObject = MessageParser.parseNearbyMessage(String(message!!.content))
+            val location = Location("")
+            location.latitude = jsonObject["Lat"].toString().toDouble()
+            location.longitude = jsonObject["Long"].toString().toDouble()
+            try {
+                val currentLocaton = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                if(location.distanceTo(currentLocaton) <= 5.0) {
+                    Log.d(TAG, "Distance less than 5 meters found for ${jsonObject["Phone"]}")
+                    if(list.any { it.second ==  jsonObject["Phone"].toString()} == false) {
+                        list.add(Pair(System.currentTimeMillis(), phoneNumber))
+                    }
+                } else {
+                    Log.d(TAG, "Number ${jsonObject["Phone"]} is out of range")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Permission for location manager failed")
+            }
+            super.onFound(message)
+        }
+
+        override fun onDistanceChanged(p0: Message?, p1: Distance?) {
+            super.onDistanceChanged(p0, p1)
+            Log.d(TAG, "Distance changed for message ${String(p0!!.content)} to ${p1.toString()}")
+        }
+
+        @SuppressLint("CheckResult")
+        override fun onLost(message: Message?) {
+            Log.d(TAG, "Messsage lost = ${String(message!!.content)}")
+            val jsonObject = MessageParser.parseNearbyMessage(String(message!!.content))
+            if(list.any { it.second == jsonObject["Phone"].toString() } == true) {
+                val pair = list.find { it.second == jsonObject["Phone"].toString() }
+                if(pair != null) {
+                    val body = JsonObject().apply {
+                        this.addProperty("PhoneNo", jsonObject["Phone"].toString())
+                        this.addProperty("TimeSpent", (System.currentTimeMillis() - pair.first).toString())
+                    }
+                    val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
+                    val jwt = sharedPreferences.getString("JWT", "")
+                    if(jwt == "") {
+                        return
+                    }
+                    RetrofitService().gerRetrofitApiService().meetUser(body, jwt.toString()).subscribeOn(Schedulers.io()).subscribe(
+                        { response ->
+                            if(response.isSuccessful) {
+                                Log.d(TAG, "Meeting user successful")
+                            } else {
+                                Log.e(TAG, "Error in meeting user = ${response.body()}\n${response.code()}")
+                            }
+                        },
+                        {
+                            Log.e(TAG, "Error in meeting user = $it")
+                        }
+                    )
+                }
+            }
+            super.onLost(message)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    @ExperimentalStdlibApi
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        nearbyCloent = Nearby.getMessagesClient(this)
+
+        checkPermissions()
+    }
+
+    private fun checkPermissions() {
+        if(!(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))) {
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        }
+        if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+        }
+        initializeActivity()
+    }
+
+    private fun initializeActivity() {
+        startLocationTracking()
+        Log.d(TAG, "Adding listener to nerby messages")
+        val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
+        phoneNumber = sharedPreferences.getString("Phone", "0000000000")!!
+        Log.d(TAG, "Recived PhoneNumber = $phoneNumber")
+        if(broadcastMessage == null) {
+            Log.d(TAG, "Entered 1 If")
+            if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Entered 2 If")
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+            } else {
+                Log.d(TAG, "Entered 2 else")
+                val locationGps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                Log.d(TAG, "Recived Current Location = ${locationGps.toString()}")
+                Toast.makeText(this, "Recived Current Location = ${locationGps.toString()}", Toast.LENGTH_LONG).show()
+                broadcastNearbyMessage("$phoneNumber\n${locationGps.latitude.toString()}\n${locationGps.longitude.toString()}")
+            }
+        }
+        try {
+            nearbyCloent.subscribe(messageListener)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in publishing message = ${e.toString()}")
+        }
+    }
+
+    private fun broadcastNearbyMessage(message: String) {
+        if(broadcastMessage != null) {
+            Log.d(TAG, "Unpublishing the previous message")
+            nearbyCloent.unpublish(broadcastMessage!!)
+        }
+        broadcastMessage = Message(message.toByteArray())
+        Log.d(TAG, "Publishing the new message ${String(broadcastMessage!!.content)}")
+        try {
+            nearbyCloent.publish(broadcastMessage!!)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in publishing message = ${e.toString()}")
+        }
+    }
+
+    private fun startLocationTracking() {
+        val criteria = Criteria().apply {
+            this.accuracy = Criteria.ACCURACY_FINE
+            this.isAltitudeRequired = false
+            this.isBearingRequired = false
+            this.isCostAllowed = true
+            this.isSpeedRequired = false
+            this.horizontalAccuracy = Criteria.ACCURACY_HIGH
+            this.verticalAccuracy = Criteria.ACCURACY_HIGH
+            this.powerRequirement = Criteria.POWER_HIGH
+        }
+        if(!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            Log.d(TAG, "Entered 3 If")
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        } else {
+            Log.d(TAG, "Entered 3 Else")
+            val locationListener: LocationListener = object: LocationListener {
+                override fun onLocationChanged(location: Location?) {
+                    Log.d(TAG, "New Location = ${location.toString()}")
+                    broadcastNearbyMessage("$phoneNumber\n${location!!.latitude.toString()}\n${location.latitude.toString()}")
+                    Toast.makeText(this@MainActivity, "New Location = ${location.toString()}", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
+                    Log.d(TAG, "OnStatusChanged callback called. New status = $status")
+                    Toast.makeText(this@MainActivity, "Status has changed. $status", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onProviderEnabled(provider: String?) {
+                    Log.d(TAG, "Provider has been enabled")
+                    Toast.makeText(this@MainActivity, "GPS has been turned on", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onProviderDisabled(provider: String?) {
+                    Log.d(TAG, "Provider has been disabled")
+                    Toast.makeText(this@MainActivity, "GPS has been turned off. Please re-enable it", Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }
+            }
+            if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Entered 4 If")
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+                ActivityCompat.OnRequestPermissionsResultCallback { requestCode, permissions, grantResults ->
+                    Log.d(TAG, "Entered callback")
+                    initializeActivity()
+                }
+            } else {
+                Log.d(TAG, "Entered 4 Else")
+                locationManager.requestLocationUpdates(500, 1f, criteria, locationListener, null)
+                Toast.makeText(this@MainActivity, "Registered Listener Succesfully", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        checkPermissions()
+    }
+}
+
+
+
+
+
+<<<<<<<<<<<BLUETOOTH WORKING>>>>>>>>>>>
+
+
+
+
+package com.example.covid_19
+
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothProfile
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.location.Criteria
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.net.wifi.WifiManager
+import android.net.wifi.aware.WifiAwareManager
+import androidx.appcompat.app.AppCompatActivity
+import android.os.Bundle
+import android.os.IBinder
+import android.provider.Settings
+import android.util.Log
+import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.example.covid_19.network.RetrofitService
+import com.example.covid_19.utils.MessageParser
+import com.google.android.gms.nearby.Nearby
+import com.google.android.gms.nearby.messages.Distance
+import com.google.android.gms.nearby.messages.Message
+import com.google.android.gms.nearby.messages.MessageListener
+import com.google.android.gms.nearby.messages.MessagesClient
+import com.google.gson.JsonObject
+import io.reactivex.schedulers.Schedulers
+import org.reactivestreams.Subscription
+
+class MainActivity : AppCompatActivity() {
+
+    private val TAG = "MainActivity"
+    private var broadcastMessage: Message? = null
+    private lateinit var locationManager: LocationManager
+    private lateinit var phoneNumber: String
+    private lateinit var nearbyCloent: MessagesClient
+    val list: MutableList<Pair<Long, String>> = ArrayList()
+    private val REQUEST_ENABLE_BT = 1
+    private lateinit var bluetoothAdapter: BluetoothAdapter
+    val listOfNearby: MutableMap<String, String> = mutableMapOf()
+    val listOfContactDevices: MutableMap<String, Long> = mutableMapOf()
+    lateinit var macAddress: String
+
+    private val receiver = object : BroadcastReceiver() {
+
+        override fun onReceive(context: Context, intent: Intent) {
+            val action: String = intent.action!!
+            when (action) {
+                BluetoothDevice.ACTION_FOUND -> {
+                    // Discovery has found a device. Get the BluetoothDevice
+                    // object and its info from the Intent.
+                    val device: BluetoothDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)!!
+                    val deviceNname = device.name
+                    val deviceHardwareAddress = device.address // MAC address
+                    Log.d(TAG, "Mac Address of discovered device = $deviceHardwareAddress")
+                    if(listOfNearby.containsKey(deviceHardwareAddress)) {
+                        if(!(listOfContactDevices.containsKey(listOfNearby[deviceHardwareAddress]))) {
+                            Log.d(TAG, "Adding to contact Device $deviceHardwareAddress")
+                            listOfContactDevices[listOfNearby[deviceHardwareAddress]!!] = System.currentTimeMillis()
+                        }
+                    }
+                }
+                else -> {
+                    Log.d(TAG, "Entered else. Starting discovery again")
+                }
+            }
+            bluetoothAdapter.startDiscovery()
+        }
+    }
+
+    val messageListener = object: MessageListener() {
+        override fun onFound(message: Message?) {
+            Log.d(TAG, "Messsage found = ${String(message!!.content)}")
+            /*val jsonObject = MessageParser.parseLocationMessage(String(message!!.content))
+            val location = Location("")
+            location.latitude = jsonObject["Lat"].toString().toDouble()
+            location.longitude = jsonObject["Long"].toString().toDouble()
+            try {
+                val currentLocaton = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                if(location.distanceTo(currentLocaton) <= 5.0) {
+                    Log.d(TAG, "Distance less than 5 meters found for ${jsonObject["Phone"]}")
+                    if(list.any { it.second ==  jsonObject["Phone"].toString()} == false) {
+                        list.add(Pair(System.currentTimeMillis(), phoneNumber))
+                    }
+                } else {
+                    Log.d(TAG, "Number ${jsonObject["Phone"]} is out of range")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Permission for location manager failed")
+            }*/
+            val jsonObject = MessageParser.parseBluetoothMessage(String(message.content))
+            listOfNearby[jsonObject["Mac"].toString()] = jsonObject["Phone"].toString()
+            super.onFound(message)
+        }
+
+        override fun onDistanceChanged(p0: Message?, p1: Distance?) {
+            super.onDistanceChanged(p0, p1)
+            Log.d(TAG, "Distance changed for message ${String(p0!!.content)} to ${p1.toString()}")
+        }
+
+        @SuppressLint("CheckResult")
+        override fun onLost(message: Message?) {
+            Log.d(TAG, "Messsage lost = ${String(message!!.content)}")
+            /*val jsonObject = MessageParser.parseLocationMessage(String(message!!.content))
+            if(list.any { it.second == jsonObject["Phone"].toString() } == true) {
+                val pair = list.find { it.second == jsonObject["Phone"].toString() }
+                if(pair != null) {
+                    val body = JsonObject().apply {
+                        this.addProperty("PhoneNo", jsonObject["Phone"].toString())
+                        this.addProperty("TimeSpent", (System.currentTimeMillis() - pair.first).toString())
+                    }
+                    val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
+                    val jwt = sharedPreferences.getString("JWT", "")
+                    if(jwt == "") {
+                        return
+                    }
+                    RetrofitService().gerRetrofitApiService().meetUser(body, jwt.toString()).subscribeOn(Schedulers.io()).subscribe(
+                        { response ->
+                            if(response.isSuccessful) {
+                                Log.d(TAG, "Meeting user successful")
+                            } else {
+                                Log.e(TAG, "Error in meeting user = ${response.body()}\n${response.code()}")
+                            }
+                        },
+                        {
+                            Log.e(TAG, "Error in meeting user = $it")
+                        }
+                    )
+                }
+            }*/
+            val jsonObject = MessageParser.parseBluetoothMessage(String(message.content))
+            listOfNearby.remove(jsonObject["Mac"].toString())
+            super.onLost(message)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    @ExperimentalStdlibApi
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        macAddress = wifiManager.connectionInfo.macAddress
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+        nearbyCloent = Nearby.getMessagesClient(this)
+
+        checkPermissions()
+    }
+
+    private fun checkPermissions() {
+        if(!(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))) {
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        }
+        if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+        }
+        if (bluetoothAdapter?.isEnabled == false) {
+            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+        }
+        initializeActivity()
+    }
+
+    private fun initializeActivity() {
+        // startLocationTracking()
+        setUpBluetooth()
+        Log.d(TAG, "Adding listener to nerby messages")
+        val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
+        phoneNumber = sharedPreferences.getString("Phone", "0000000000")!!
+        Log.d(TAG, "Recived PhoneNumber = $phoneNumber")
+        if(broadcastMessage == null) {
+            Log.d(TAG, "Entered 1 If")
+            if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Entered 2 If")
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+            } else {
+                Log.d(TAG, "Entered 2 else")
+                // val locationGps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                // Log.d(TAG, "Recived Current Location = ${locationGps.toString()}")
+                // Toast.makeText(this, "Recived Current Location = ${locationGps.toString()}", Toast.LENGTH_LONG).show()
+                broadcastNearbyMessage("$macAddress\n$phoneNumber")
+            }
+        }
+        try {
+            nearbyCloent.subscribe(messageListener)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in publishing message = ${e.toString()}")
+        }
+    }
+
+    private fun broadcastNearbyMessage(message: String) {
+        if(broadcastMessage != null) {
+            Log.d(TAG, "Unpublishing the previous message")
+            nearbyCloent.unpublish(broadcastMessage!!)
+        }
+        broadcastMessage = Message(message.toByteArray())
+        Log.d(TAG, "Publishing the new message ${String(broadcastMessage!!.content)}")
+        try {
+            nearbyCloent.publish(broadcastMessage!!)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in publishing message = ${e.toString()}")
+        }
+    }
+
+    private fun startLocationTracking() {
+        val criteria = Criteria().apply {
+            this.accuracy = Criteria.ACCURACY_FINE
+            this.isAltitudeRequired = false
+            this.isBearingRequired = false
+            this.isCostAllowed = true
+            this.isSpeedRequired = false
+            this.horizontalAccuracy = Criteria.ACCURACY_HIGH
+            this.verticalAccuracy = Criteria.ACCURACY_HIGH
+            this.powerRequirement = Criteria.POWER_HIGH
+        }
+        if(!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            Log.d(TAG, "Entered 3 If")
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        } else {
+            Log.d(TAG, "Entered 3 Else")
+            val locationListener: LocationListener = object: LocationListener {
+                override fun onLocationChanged(location: Location?) {
+                    Log.d(TAG, "New Location = ${location.toString()}")
+                    broadcastNearbyMessage("$phoneNumber\n${location!!.latitude.toString()}\n${location.latitude.toString()}")
+                    Toast.makeText(this@MainActivity, "New Location = ${location.toString()}", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
+                    Log.d(TAG, "OnStatusChanged callback called. New status = $status")
+                    Toast.makeText(this@MainActivity, "Status has changed. $status", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onProviderEnabled(provider: String?) {
+                    Log.d(TAG, "Provider has been enabled")
+                    Toast.makeText(this@MainActivity, "GPS has been turned on", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onProviderDisabled(provider: String?) {
+                    Log.d(TAG, "Provider has been disabled")
+                    Toast.makeText(this@MainActivity, "GPS has been turned off. Please re-enable it", Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }
+            }
+            if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Entered 4 If")
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+                ActivityCompat.OnRequestPermissionsResultCallback { requestCode, permissions, grantResults ->
+                    Log.d(TAG, "Entered callback")
+                    initializeActivity()
+                }
+            } else {
+                Log.d(TAG, "Entered 4 Else")
+                locationManager.requestLocationUpdates(500, 1f, criteria, locationListener, null)
+                Toast.makeText(this@MainActivity, "Registered Listener Succesfully", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun setUpBluetooth() {
+        val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
+        registerReceiver(receiver, filter)
+        bluetoothAdapter.startDiscovery()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        checkPermissions()
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+<<<<<<<<<FusedLocation>>>>>>>>>
+
+
+
+
+
+package com.example.covid_19
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Criteria
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Bundle
+import android.provider.Settings
+import android.util.Log
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.example.covid_19.network.RetrofitService
+import com.example.covid_19.utils.MessageParser
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GooglePlayServicesUtil
+import com.google.android.gms.common.api.GoogleApiClient
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.nearby.Nearby
+import com.google.android.gms.nearby.messages.Distance
+import com.google.android.gms.nearby.messages.Message
+import com.google.android.gms.nearby.messages.MessageListener
+import com.google.android.gms.nearby.messages.MessagesClient
+import com.google.gson.JsonObject
+import io.reactivex.schedulers.Schedulers
+
+class MainActivity : AppCompatActivity(), GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+
+    private val TAG = "MainActivity"
+    private var broadcastMessage: Message? = null
+    private lateinit var locationManager: LocationManager
+    private lateinit var phoneNumber: String
+    private lateinit var nearbyCloent: MessagesClient
+    val list: MutableList<Pair<Long, String>> = ArrayList()
+    val REQUEST_CODE_RECOVER_PLAY_SERVICES = 0
+    private lateinit var mGoogleApiClient: GoogleApiClient
+
+    val messageListener = object: MessageListener() {
+        override fun onFound(message: Message?) {
+            Log.d(TAG, "Messsage found = ${String(message!!.content)}")
+            val jsonObject = MessageParser.parseLocationMessage(String(message!!.content))
+            val location = Location("")
+            location.latitude = jsonObject["Lat"].toString().toDouble()
+            location.longitude = jsonObject["Long"].toString().toDouble()
+            try {
+                val currentLocaton = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                if(location.distanceTo(currentLocaton) <= 5.0) {
+                    Log.d(TAG, "Distance less than 5 meters found for ${jsonObject["Phone"]}")
+                    if(list.any { it.second ==  jsonObject["Phone"].toString()} == false) {
+                        list.add(Pair(System.currentTimeMillis(), phoneNumber))
+                    }
+                } else {
+                    Log.d(TAG, "Number ${jsonObject["Phone"]} is out of range")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Permission for location manager failed")
+            }
+            super.onFound(message)
+        }
+
+        override fun onDistanceChanged(p0: Message?, p1: Distance?) {
+            super.onDistanceChanged(p0, p1)
+            Log.d(TAG, "Distance changed for message ${String(p0!!.content)} to ${p1.toString()}")
+        }
+
+        @SuppressLint("CheckResult")
+        override fun onLost(message: Message?) {
+            Log.d(TAG, "Messsage lost = ${String(message!!.content)}")
+            val jsonObject = MessageParser.parseLocationMessage(String(message!!.content))
+            if(list.any { it.second == jsonObject["Phone"].toString() } == true) {
+                val pair = list.find { it.second == jsonObject["Phone"].toString() }
+                if(pair != null) {
+                    val body = JsonObject().apply {
+                        this.addProperty("PhoneNo", jsonObject["Phone"].toString())
+                        this.addProperty("TimeSpent", (System.currentTimeMillis() - pair.first).toString())
+                    }
+                    val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
+                    val jwt = sharedPreferences.getString("JWT", "")
+                    if(jwt == "") {
+                        return
+                    }
+                    RetrofitService().gerRetrofitApiService().meetUser(body, jwt.toString()).subscribeOn(Schedulers.io()).subscribe(
+                            { response ->
+                                if(response.isSuccessful) {
+                                    Log.d(TAG, "Meeting user successful")
+                                } else {
+                                    Log.e(TAG, "Error in meeting user = ${response.body()}\n${response.code()}")
+                                }
+                            },
+                            {
+                                Log.e(TAG, "Error in meeting user = $it")
+                            }
+                    )
+                }
+            }
+            super.onLost(message)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    @ExperimentalStdlibApi
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        mGoogleApiClient = GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(LocationServices.API)
+                .build()
+        nearbyCloent = Nearby.getMessagesClient(this)
+
+        checkPermissions()
+    }
+
+    private fun checkPermissions() {
+        if(!(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))) {
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        }
+        if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+        }
+        val checkGooglePlayServices = GooglePlayServicesUtil
+                .isGooglePlayServicesAvailable(applicationContext);
+        if (checkGooglePlayServices != ConnectionResult.SUCCESS) {
+            GooglePlayServicesUtil.getErrorDialog(checkGooglePlayServices,
+                    this, REQUEST_CODE_RECOVER_PLAY_SERVICES).show()
+        }
+        initializeActivity()
+    }
+
+    private fun initializeActivity() {
+        if(mGoogleApiClient != null) {
+            mGoogleApiClient.connect()
+        }
+        // startLocationTracking()
+    }
+
+    private fun broadcastNearbyMessage(message: String) {
+        if(broadcastMessage != null) {
+            Log.d(TAG, "Unpublishing the previous message")
+            nearbyCloent.unpublish(broadcastMessage!!)
+        }
+        broadcastMessage = Message(message.toByteArray())
+        Log.d(TAG, "Publishing the new message ${String(broadcastMessage!!.content)}")
+        try {
+            nearbyCloent.publish(broadcastMessage!!)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in publishing message = ${e.toString()}")
+        }
+    }
+
+    private fun startLocationTracking() {
+        /*val criteria = Criteria().apply {
+            this.accuracy = Criteria.ACCURACY_FINE
+            this.isAltitudeRequired = false
+            this.isBearingRequired = false
+            this.isCostAllowed = true
+            this.isSpeedRequired = false
+            this.horizontalAccuracy = Criteria.ACCURACY_HIGH
+            this.verticalAccuracy = Criteria.ACCURACY_HIGH
+            this.powerRequirement = Criteria.POWER_HIGH
+        }
+        if(!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            Log.d(TAG, "Entered 3 If")
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        } else {
+            Log.d(TAG, "Entered 3 Else")
+            val locationListener: LocationListener = object: LocationListener {
+                override fun onLocationChanged(location: Location?) {
+                    Log.d(TAG, "New Location = ${location.toString()}")
+                    broadcastNearbyMessage("$phoneNumber\n${location!!.latitude.toString()}\n${location.latitude.toString()}")
+                    Toast.makeText(this@MainActivity, "New Location = ${location.toString()}", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
+                    Log.d(TAG, "OnStatusChanged callback called. New status = $status")
+                    Toast.makeText(this@MainActivity, "Status has changed. $status", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onProviderEnabled(provider: String?) {
+                    Log.d(TAG, "Provider has been enabled")
+                    Toast.makeText(this@MainActivity, "GPS has been turned on", Toast.LENGTH_LONG).show()
+                }
+
+                override fun onProviderDisabled(provider: String?) {
+                    Log.d(TAG, "Provider has been disabled")
+                    Toast.makeText(this@MainActivity, "GPS has been turned off. Please re-enable it", Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }
+            }
+            if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "Entered 4 If")
+                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
+                ActivityCompat.OnRequestPermissionsResultCallback { requestCode, permissions, grantResults ->
+                    Log.d(TAG, "Entered callback")
+                    initializeActivity()
+                }
+            } else {
+                Log.d(TAG, "Entered 4 Else")
+                locationManager.requestLocationUpdates(500, 1f, criteria, locationListener, null)
+                Toast.makeText(this@MainActivity, "Registered Listener Succesfully", Toast.LENGTH_LONG).show()
+            }
+       }*/
+        val locationRequest = LocationRequest()
+        val locationListener: com.google.android.gms.location.LocationListener = object: com.google.android.gms.location.LocationListener {
+            override fun onLocationChanged(location: Location?) {
+                Log.d(TAG, "New Location = ${location.toString()}")
+                broadcastNearbyMessage("$phoneNumber\n${location!!.latitude.toString()}\n${location.latitude.toString()}")
+                Toast.makeText(this@MainActivity, "New Location = ${location.toString()}", Toast.LENGTH_LONG).show()
+            }
+        }
+        locationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        locationRequest.interval = 5000
+        locationRequest.fastestInterval = 500
+        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, locationRequest, locationListener!!)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_RECOVER_PLAY_SERVICES) {
+            if (resultCode == RESULT_OK) {
+                // Make sure the app is not already connected or attempting to connect
+                if (!mGoogleApiClient.isConnecting() &&
+                        !mGoogleApiClient.isConnected()) {
+                    mGoogleApiClient.connect();
+                }
+            } else if (resultCode == RESULT_CANCELED) {
+                Toast.makeText(applicationContext, "Google Play Services must be installed.",
+                        Toast.LENGTH_SHORT).show();
+                finish();
+            }
+        }
+        checkPermissions()
+    }
+
+    override fun onConnected(p0: Bundle?) {
+        val location = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient)
+        if(location != null) {
+            Log.d(TAG, "Adding listener to nerby messages")
+            val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
+            phoneNumber = sharedPreferences.getString("Phone", "0000000000")!!
+            Log.d(TAG, "Recived PhoneNumber = $phoneNumber")
+            if(broadcastMessage == null) {
+                Log.d(TAG, "Entered 1 If")
+                Log.d(TAG, "Entered 2 else")
+                val locationGps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                Log.d(TAG, "Recived Current Location = ${locationGps.toString()}")
+                Toast.makeText(this, "Recived Current Location = ${locationGps.toString()}", Toast.LENGTH_LONG).show()
+                broadcastNearbyMessage("$phoneNumber\n${locationGps.latitude.toString()}\n${locationGps.longitude.toString()}")
+            }
+            try {
+                nearbyCloent.subscribe(messageListener)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in publishing message = ${e.toString()}")
+            }
+        }
+        startLocationTracking()
+    }
+
+    override fun onConnectionSuspended(p0: Int) {
+        Log.e(TAG, "GoogleServicesConnection susspended $p0")
+    }
+
+    override fun onConnectionFailed(p0: ConnectionResult) {
+        Log.e(TAG, "GoogleServices Connection Failed $p0")
+    }
+}
