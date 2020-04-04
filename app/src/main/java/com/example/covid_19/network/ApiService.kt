@@ -12,9 +12,9 @@ interface ApiService {
     @POST("sign_in")
     fun loginUser(@Body body: JsonObject): Single<Response<Any>>
 
-    @POST
+    @POST("sign_up")
     fun signUpUser(@Body body: JsonObject): Single<Response<Any>>
 
-    @POST
+    @POST("met_user")
     fun meetUser(@Body body: JsonObject, @Header("Authorization") jwt: String): Single<Response<Any>>
 }

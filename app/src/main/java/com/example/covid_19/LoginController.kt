@@ -7,6 +7,7 @@ import android.util.Log
 import com.example.covid_19.network.RetrofitService
 import com.google.gson.JsonObject
 import io.reactivex.schedulers.Schedulers
+import org.json.JSONObject
 
 interface LoginListener {
     fun onLoginSuccess(jwt: String)
@@ -36,7 +37,7 @@ class LoginController(val loginListener: LoginListener, val context: Context) {
             Log.d(TAG, "Login Response recived = ${response.body()} \n ${response.code()}")
             if(response.isSuccessful) {
                 Log.d(TAG, "LoginSuccessfull")
-                val jwt = JsonObject().getAsJsonObject(response.body().toString())["token"].toString()
+                val jwt = JSONObject(response.body().toString()).getString("token")
                 Log.d(TAG, "JWT recived = $jwt")
                 val sharedPreferences = context.getSharedPreferences("MySharedPreferences", MODE_PRIVATE)
                 sharedPreferences.edit().apply {

@@ -19,6 +19,7 @@ import kotlinx.android.synthetic.main.activity_login.*
 import kotlinx.android.synthetic.main.activity_sign_up.*
 import kotlinx.android.synthetic.main.activity_sign_up.editTextPassword
 import kotlinx.android.synthetic.main.activity_sign_up.editTextPhoneNumber
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 class SignUpActivity : AppCompatActivity() {
@@ -48,17 +49,17 @@ class SignUpActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             if(editTextPassword.text.length <= 6) {
-                editTextPassword.error = "Password must be atleast 6 characters"
+                editTextPassword.error = "Password must be atleast 7 characters"
                 return@setOnClickListener
             }
             if(editTextPasswordConfirmation.text.isEmpty()) {
                 editTextPasswordConfirmation.error = "Required"
                 return@setOnClickListener
             }
-            if(editTextPasswordConfirmation.text != editTextPassword.text) {
-                editTextPasswordConfirmation.error = "Passwords don't match"
-                return@setOnClickListener
-            }
+//            if(editTextPasswordConfirmation.text != editTextPassword.text) {
+//                editTextPasswordConfirmation.error = "Passwords don't match"
+//                return@setOnClickListener
+//            }
             if(editTextName.text.isEmpty()) {
                 editTextName.error = "Enter a valid name"
                 return@setOnClickListener
@@ -91,7 +92,7 @@ class SignUpActivity : AppCompatActivity() {
                                 Log.d(TAG, "Login Response recived = ${response.body()} \n ${response.code()}")
                                 if(response.isSuccessful) {
                                     Log.d(TAG, "LoginSuccessfull")
-                                    val jwt = JsonObject().getAsJsonObject(response.body().toString())["token"].toString()
+                                    val jwt = JSONObject(response.body().toString()).getString("token")
                                     Log.d(TAG, "JWT recived = $jwt")
                                     val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", MODE_PRIVATE)
                                     sharedPreferences.edit().apply {
@@ -105,12 +106,12 @@ class SignUpActivity : AppCompatActivity() {
                                     startActivity(Intent(this@SignUpActivity, MainActivity::class.java))
                                 } else {
                                     Log.e(TAG, "Login Failed")
-                                    Toast.makeText(this@SignUpActivity, "Unable to Login. Please try again", Toast.LENGTH_LONG).show()
+//                                    Toast.makeText(this@SignUpActivity, "Unable to Login. Please try again", Toast.LENGTH_LONG).show()
                                 }
                             },
                             {
                                 Log.e(TAG, "Login Error ${it.message.toString()}")
-                                Toast.makeText(this@SignUpActivity, "Unable to Login. Please try again", Toast.LENGTH_LONG).show()
+//                                Toast.makeText(this@SignUpActivity, "Unable to Login. Please try again", Toast.LENGTH_LONG).show()
                             })
                     }
 

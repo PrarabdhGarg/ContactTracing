@@ -10,7 +10,7 @@ class RetrofitService {
     fun gerRetrofitApiService(): ApiService {
         if(retrofit == null) {
             retrofit = Retrofit.Builder()
-                    .baseUrl("")
+                    .baseUrl("https://dushyant.tech/")
                     .addConverterFactory(GsonConverterFactory.create())
                     .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
                     .build()
