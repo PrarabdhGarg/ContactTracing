@@ -35,6 +35,7 @@ class LoginActivity : AppCompatActivity(), LoginListener {
         }
 
         buttonLogin.setOnClickListener {
+            startActivity(Intent(this@LoginActivity, MainActivity::class.java))
             if(editTextPhoneNumber.text == null || editTextPhoneNumber.text.toString().length != 10) {
                 editTextPhoneNumber.error = "Please enter a valid phone number"
                 return@setOnClickListener
