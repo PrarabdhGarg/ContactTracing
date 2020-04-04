@@ -72,7 +72,7 @@ class SignUpActivity : AppCompatActivity() {
             }
             PhoneAuthProvider.getInstance().verifyPhoneNumber(
                 "+91" + editTextPhoneNumber.text.toString(),
-                120,
+                30,
                 TimeUnit.SECONDS,
                 this,
                 object: PhoneAuthProvider.OnVerificationStateChangedCallbacks() {
@@ -117,16 +117,19 @@ class SignUpActivity : AppCompatActivity() {
 
                     override fun onVerificationFailed(p0: FirebaseException) {
                         progressSignUpActivity.visibility = View.INVISIBLE
+                        Log.e(TAG, "Verification Failed ${p0.message}")
                         Toast.makeText(this@SignUpActivity, "Failed to Verify Phone Number. Try again later", Toast.LENGTH_LONG).show()
                     }
 
                     override fun onCodeSent(verificationId: String, token: PhoneAuthProvider.ForceResendingToken) {
+                        Log.d(TAG, "Code sent")
                         verification = verificationId
                         tokenResend = token
                     }
 
                     override fun onCodeAutoRetrievalTimeOut(p0: String) {
                         progressSignUpActivity.visibility = View.INVISIBLE
+                        Log.d(TAG, "Timeout")
                         Toast.makeText(this@SignUpActivity, "Auto-Retrieval Failed", Toast.LENGTH_LONG).show()
                         val intent = Intent(this@SignUpActivity, OtpVerificationActivity::class.java)
                         intent.putExtra("VER", verification)

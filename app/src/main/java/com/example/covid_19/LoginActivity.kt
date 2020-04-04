@@ -60,7 +60,7 @@ class LoginActivity : AppCompatActivity(), LoginListener {
     }
 
     override fun onLoginSuccess(jwt: String) {
-        progressLoginActivity.visibility = View.INVISIBLE
+        // progressLoginActivity.visibility = View.INVISIBLE
         /*val serviceIntent = Intent(this, ForegroundNearbyService::class.java)
         serviceIntent.putExtra("message", "Hello World Vivo")
         ContextCompat.startForegroundService(this, serviceIntent)*/
@@ -72,7 +72,9 @@ class LoginActivity : AppCompatActivity(), LoginListener {
         progressLoginActivity.visibility = View.INVISIBLE
         when(handleMechanism) {
             0 -> {
-                Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                runOnUiThread {
+                    Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

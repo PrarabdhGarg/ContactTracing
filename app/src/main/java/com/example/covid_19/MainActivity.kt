@@ -3,25 +3,16 @@ package com.example.covid_19
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothHeadset
-import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.location.Criteria
-import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
-import android.net.wifi.WifiManager
-import android.net.wifi.aware.WifiAwareManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.covid_19.network.RetrofitService
@@ -33,7 +24,6 @@ import com.google.android.gms.nearby.messages.MessageListener
 import com.google.android.gms.nearby.messages.MessagesClient
 import com.google.gson.JsonObject
 import io.reactivex.schedulers.Schedulers
-import org.reactivestreams.Subscription
 
 class MainActivity : AppCompatActivity() {
 
@@ -56,15 +46,16 @@ class MainActivity : AppCompatActivity() {
             when (action) {
                 BluetoothDevice.ACTION_FOUND -> {
                     val device: BluetoothDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)!!
-                    val deviceNname = device.name
+                    val deviceName = device.name
                     val deviceHardwareAddress = device.address // MAC address
-                    Log.d(TAG, "Mac Address of discovered device = $deviceHardwareAddress")
-                    if(listOfNearby.containsKey(deviceHardwareAddress)) {
-                        if(!(listOfContactDevices.containsKey(listOfNearby[deviceHardwareAddress]))) {
+                    Log.d(TAG, "Mac Address of discovered device = $deviceHardwareAddress \n $deviceName")
+                    if(listOfNearby.containsKey(deviceName)) {
+                        Log.d(TAG, "List of nearby contains $deviceHardwareAddress")
+                        if(!(listOfContactDevices.containsKey(listOfNearby[deviceName]))) {
                             Log.d(TAG, "Adding to contact Device $deviceHardwareAddress")
-                            listOfContactDevices[listOfNearby[deviceHardwareAddress]!!] = System.currentTimeMillis()
+                            listOfContactDevices[listOfNearby[deviceName]!!] = System.currentTimeMillis()
                             val body = JsonObject().apply {
-                                this.addProperty("PhoneNo", listOfNearby[deviceHardwareAddress])
+                                this.addProperty("PhoneNo", listOfNearby[deviceName])
                                 this.addProperty("TimeSpent", 0)
                             }
                             val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
@@ -123,9 +114,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        macAddress = wifiManager.connectionInfo.macAddress
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+        macAddress = bluetoothAdapter.name
+        Log.d(TAG, "BLE NAME = ${bluetoothAdapter.name}")
         nearbyCloent = Nearby.getMessagesClient(this)
 
         checkPermissions()
@@ -135,10 +126,10 @@ class MainActivity : AppCompatActivity() {
         if(!(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))) {
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         }
-        if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        else if(ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 5)
         }
-        if (bluetoothAdapter?.isEnabled == false) {
+        else if (bluetoothAdapter?.isEnabled == false) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
             startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
         }
@@ -147,6 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun initializeActivity() {
         setUpBluetooth()
+        bluetoothAdapter.startDiscovery()
         Log.d(TAG, "Adding listener to nerby messages")
         val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", Context.MODE_PRIVATE)
         phoneNumber = sharedPreferences.getString("Phone", "0000000000")!!
