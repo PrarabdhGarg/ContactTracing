@@ -1,6 +1,7 @@
 package com.example.covid_19
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -8,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.location.LocationManager
 import android.os.Bundle
 import android.provider.Settings
@@ -24,6 +26,7 @@ import com.google.android.gms.nearby.messages.MessageListener
 import com.google.android.gms.nearby.messages.MessagesClient
 import com.google.gson.JsonObject
 import io.reactivex.schedulers.Schedulers
+import kotlinx.android.synthetic.main.activity_main.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -118,6 +121,16 @@ class MainActivity : AppCompatActivity() {
         macAddress = bluetoothAdapter.name
         Log.d(TAG, "BLE NAME = ${bluetoothAdapter.name}")
         nearbyCloent = Nearby.getMessagesClient(this)
+
+        bttnHealthStatus.setOnClickListener {
+            if(bttnHealthStatus.text == "Healthy") {
+                bttnHealthStatus.text = "Infected"
+                bttnHealthStatus.backgroundTintList = ContextCompat.getColorStateList(this, R.color.red)
+            } else {
+                bttnHealthStatus.text = "Healthy"
+                bttnHealthStatus.backgroundTintList = ContextCompat.getColorStateList(this, R.color.green)
+            }
+        }
 
         checkPermissions()
     }
