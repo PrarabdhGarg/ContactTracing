@@ -20,7 +20,7 @@
         tools:ignore="GoogleAppIndexingWarning">
         <activity android:name=".OtpVerificationActivity"/>
         <activity android:name=".SignUpActivity" />
-        <activity android:name=".LoginActivity" />
+        <activity android:name=".MainActivity" />
         <service
             android:name=".ForegroundNearbyService"
             android:enabled="true"
@@ -30,10 +30,9 @@
             android:name="com.google.android.nearby.messages.API_KEY"
             android:value="AIzaSyABtF0ywmJkLzz1xPnmjv4U6CXfVJMrZuk" />
 
-        <activity android:name=".MainActivity">
+        <activity android:name=".LoginActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>

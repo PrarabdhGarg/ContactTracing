@@ -16,6 +16,7 @@ import com.google.gson.JsonObject
 import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.activity_otp_verification.*
 import kotlinx.android.synthetic.main.activity_sign_up.*
+import org.json.JSONObject
 
 class OtpVerificationActivity : AppCompatActivity() {
 
@@ -55,7 +56,7 @@ class OtpVerificationActivity : AppCompatActivity() {
                             Log.d(TAG, "Login Response recived = ${response.body()} \n ${response.code()}")
                             if(response.isSuccessful) {
                                 Log.d(TAG, "LoginSuccessfull")
-                                val jwt = JsonObject().getAsJsonObject(response.body().toString())["token"].toString()
+                                val jwt = JSONObject(response.body().toString()).getString("token")
                                 Log.d(TAG, "JWT recived = $jwt")
                                 val sharedPreferences = applicationContext.getSharedPreferences("MySharedPreferences", MODE_PRIVATE)
                                 sharedPreferences.edit().apply {
